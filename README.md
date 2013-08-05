@@ -16,3 +16,8 @@ stats.tcl       - tivoweb module, shows you a clickable "Tag Cloud" of all actor
 
 FixMWstate.tcl  - fixes the so called MWState bug which causes a crash
 
+skip2time.tcl   - skip directly to a specific number of minutes into a recording
+
+suggs.tcl       - alternative suggestion engine 
+
+recordpast.tcl  - setup a wishlist or season pass from an existing recording
