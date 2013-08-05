@@ -4,9 +4,10 @@
 # by mikerr@tivocommunity
 #
 # Overview
-#       sortnp processes the Now Playing list and sorts it by title
-#
-#  Also adds episode details into title
+#       sortnp processes the Now Playing list and sorts it by title, date or duration
+#       
+#	* restore deleted programmes
+#	* adds episode details into title
 #
 # Requirements
 #
