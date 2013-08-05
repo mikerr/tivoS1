@@ -1,0 +1,229 @@
+# Stats - Tag Cloud & (later) stats about your recording history
+#
+#   Version 1.2   11/10/2011
+#
+#   mikerr @ tivocommunity
+#
+# 1.2 
+# - updated to correctly handle altepg data ordering
+#
+# Tivo: Bacula|Scott Applegate|Christina
+# Altepg: {Scott Bacula}{Christina Applegate}
+#
+# 1.1 
+# - Can now select which list is used (nowplaying / history / pending suggestions / todo )
+# (previously only showed nowplaying)
+# - added subsection to view those lists as well.
+# 1.0 
+# - initial release
+
+proc action_showlist {chan path envr} {
+global tzoffset env
+  global source_dir
+global nowshowingdir
+global db
+eval $envr
+
+set count 0
+puts $chan [html_start "Listing Shows"]
+
+puts $chan "<table><th colspan=2>Statistics Module</th><tr>"
+puts $chan "<td colspan=2>List of programmes to use:"
+puts $chan "<tr><td><form><select name=\"playlist\" width=20>"
+puts $chan "<option value=\"$nowshowingdir\">NowShowing</option>"
+puts $chan "<option value=\"/Recording/Active\">NowShowing + TODO</option>"
+puts $chan "<option value=\"/Recording/History\">Recording History</option>"
+puts $chan "<option value=\"/Recording/Pending\">Pending Suggestions</option>"
+puts $chan "<option value=\"/Recording/NoReRecord\">NoReRecord</option>"
+puts $chan "</select><td><input type=submit value=\"go\"></form></table>"
+
+puts $chan "View statistics for <a href=\"/stats?playlist=$playlist\">$playlist</a><p>"
+
+puts $chan "<table><th colspan=3>Listing $playlist</th><tr>"
+
+ForeachMfsFileTrans fsid name type $playlist "" 15 {
+	set rec [db $db openid $fsid]
+
+	set showing [dbobj $rec get Showing]
+
+	set showingfsid [dbobj $rec gettarget Showing]
+	set station [dbobj $showing get Station]
+        set stationfsid [dbobj $station fsid]
+        set stationname [strim [dbobj $station get Name]]
+	set program [dbobj $showing get Program]
+	set title [strim [dbobj $program get Title]]
+        set state [dbobj $rec get State]
+
+if  { $state == 1 } { set state "TO DO (SUGGESTION)" } #suggestion
+if  { $state == 2 } { set state "CANCELLED" }
+if  { $state == 4 } { set state "" }
+if  { $state == 5 } { set state "DELETED" }
+if  { $state == 6 } { set state "TO DO" }
+
+        incr count
+        puts $chan "<tr><td width=50>$state</td><td width=400><a href=\"/showing/$showingfsid\">$title</a></td><td width=200><a href=\"/channel/$stationfsid\">$stationname</a></td></tr>"
+	}
+
+puts $chan "</table>"
+puts $chan "$count programmes listed."
+puts $chan [html_end]
+}
+
+proc action_stats {chan path envr} {
+  global tzoffset env
+  global source_dir
+global nowshowingdir
+global db
+set count 0
+set playlist $nowshowingdir
+eval $envr
+
+puts $chan [html_start "Statistics Module"]
+  
+
+puts $chan "<table><th colspan=2>Statistics Module</th><tr>"
+puts $chan "<td colspan=2>List of programmes to use:"
+puts $chan "<tr><td><form><select name=\"playlist\" width=20>"
+puts $chan "<option value=\"$nowshowingdir\">NowShowing</option>"
+puts $chan "<option value=\"/Recording/Active\">NowShowing + TODO</option>"
+puts $chan "<option value=\"/Recording/History\">Recording History</option>"
+puts $chan "<option value=\"/Recording/Pending\">Pending Suggestions</option>"
+puts $chan "<option value=\"/Recording/NoReRecord\">NoReRecord</option>"
+puts $chan "</select><td><input type=submit value=\"go\"></form></table>"
+
+puts $chan "Using the <a href=/showlist?playlist=$playlist>$playlist</a> list...<p>" 
+
+ForeachMfsFileTrans fsid name type $playlist "" 15 {
+	set rec [db $db openid $fsid]
+
+	set showing [dbobj $rec get Showing]
+	# set showingfsid [dbobj $rec gettarget Showing]
+	set station [dbobj $showing get Station]
+        set stationname [strim [dbobj $station get Name]]
+	set program [dbobj $showing get Program]
+	# set title [strim [dbobj $program get Title]]
+        set actorlist [dbobj $program get Actor]
+
+        add_tag channelcloud $stationname
+         incr count
+
+        foreach  actor $actorlist  {
+                # actor names are stored reversed like "Willis|Bruce" 
+
+                set names [split  $actor "|"]
+                set surname [lindex $names 0]
+                set firstname [lindex $names 1]
+              
+								# insert comma only if necessary
+								if {$firstname !=""} {
+											set actorname "$surname,firstname"
+										 } else {
+										 set actorname $surname }
+
+                 add_tag actorcloud $actorname
+                }
+	}
+
+
+ # only use sizes 1-7
+ cloud_tags channelcloud 7
+
+
+puts $chan "Found $count programmes<br>"
+
+ puts $chan "<table><th>Channels Tag Cloud</th><tr><td>"
+ puts $chan {<div style="float:left; text-align:center; margin:0px 20px 0px 20px;">}
+ foreach tag [lsort -dictionary [array names channelcloud_counts]] {
+   set size  [expr $channelcloud_buckets($tag) * 50]
+   puts $chan "<span style=\"font-size:$size%\">$tag</span>" 
+ }
+ puts $chan {</div>}
+ puts $chan "</td></tr></table>"
+
+cloud_tags actorcloud 7
+
+ puts $chan "<table><th>Actors Tag Cloud (clickable)</th><tr><td>"
+ puts $chan {<div style="float:left; text-align:center; margin:0px 20px 0px 20px;">}
+ foreach tag [lsort -dictionary [array names actorcloud_counts]] {
+   set size  [expr $actorcloud_buckets($tag) * 50]
+   puts $chan "<span style=\"font-size:$size%\"><a href=\"/search?searchby=3&cat=0&scat=0&showemptyhits=1&q=$tag&submit=Search\">$tag</a></span>"
+ }
+ puts $chan {</div>}
+ puts $chan "</td></tr></table>"
+
+
+   puts $chan [html_end]
+ 
+}
+proc cloud_tags { cloudname {range 7} } {
+   upvar ${cloudname}_counts cloud_counts
+   upvar ${cloudname}_buckets cloud_buckets
+set last_count 0
+
+   set tag_sizes $range
+
+   set taglist {}
+   foreach tag [array names cloud_counts] {
+     lappend taglist [list $cloud_counts($tag) $tag]
+   }
+   set total_tags [llength $taglist]
+   if {$total_tags} {
+
+     set min_tags [expr {$total_tags / $tag_sizes}]
+
+     set bucket_count 1
+     set bucket_items 0
+     set tags_set 0
+     foreach tagdata [lsort -integer -index 0 $taglist] {
+       set tag_count [lindex $tagdata 0]
+       set tag [lindex $tagdata 1]
+
+ #  If we've met the minimum number of tags for this class and the current
+ #  tag does not equal the last tag, we can proceed to the next class.
+
+       if {$bucket_items >= $min_tags && $last_count != $tag_count && $bucket_count < $tag_sizes} {
+         incr bucket_count
+         set bucket_items 0
+
+ #  Calculate a new minimum number of tags for the remaining buckets.
+
+         set remaining_tags [expr {$total_tags - $tags_set}]
+         set min_tags [expr {$remaining_tags / $bucket_count}]
+       }
+
+ # Set the tag to the current class.
+
+       set cloud_buckets($tag) $bucket_count
+       incr bucket_items
+       incr tags_set
+
+       set last_count $tag_count
+     }
+   }
+ }
+
+#Tag Cloud
+
+ proc add_tag { cloudname tag } {
+   upvar ${cloudname}_counts cloud_counts
+
+   if {[info exists cloud_counts($tag)]} {
+     incr cloud_counts($tag)
+   } else {
+     set cloud_counts($tag) 1
+   }
+   return $cloud_counts($tag)
+ }
+
+ 
+register_module "stats" "Stats" "Statistics about your recordings"
+
+
+
+
+
+
+
+
+
+
