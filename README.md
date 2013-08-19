@@ -3,6 +3,8 @@ tivoS1
 
 Scripts and programs for the (UK) Thomson TiVo S1
 
+<img src=http://www.tivocentral.co.uk/images/tivosystem.jpg>
+
 
 SortNP.tcl  - sortnp processes the Now Playing list and sorts it by title,date or duration
             - adds folder functionality
